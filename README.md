@@ -121,6 +121,11 @@ plugin_manager({ action: "set_bundle", target: "dsh-terminal-wsl", enabled: true
 plugin_manager({ action: "remove_bundle", target: "dsh-terminal-wsl" })
 ```
 
+**安装排错**：从本地目录（`link:`）安装切换到 git/tarball 安装时，若报
+`EPERM: operation not permitted, rename ... node_modules/dsh-terminal-wsl`，说明 profile 的
+`node_modules` 里残留了旧目录链接。先 `remove_bundle`，再删除该链接（Windows 下目录链接用
+`cmd /c rmdir <link>`，只删链接、不动源目录），然后重新 `install_bundle`。
+
 ## 6. 验证
 
 ### 离线自检（无需 DSH / WSL）
