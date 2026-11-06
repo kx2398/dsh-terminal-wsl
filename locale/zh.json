@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "WSL 终端",
+    "description": "新增 WSL（Windows 的 Linux 子系统）持久终端后端，可在终端工具中以类型 \"wsl\" 打开 Linux 交互会话。"
+  }
+}

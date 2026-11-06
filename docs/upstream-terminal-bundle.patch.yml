@@ -1,0 +1,28 @@
+# Upstream reference — DO NOT EDIT.
+#
+# Verbatim copy of the shipped patch this bundle overrides:
+#   @deepseek-ai/dsh-experimental-terminal-bundle/cordis.patch.yml
+#
+# It is kept here only so `scripts/check.mjs` can detect when a harness upgrade
+# changes the group this bundle re-declares. When upgrading DSH, extract the
+# shipped file again (it lives in the desktop app's app.asar) and replace this
+# copy, then run `node scripts/check.mjs`.
+- insert:
+    - id: optional-persistent-terminals
+      name: cordis:group
+      group: true
+      isolate:
+        terminals: true
+      config:
+        - id: optional-terminal-registry
+          name: '@deepseek-ai/dsh-terminal'
+        - id: optional-terminal-bash
+          name: '@deepseek-ai/dsh-terminal-bash'
+          disabled: !!js process.platform === 'win32'
+        - id: optional-terminal-pwsh
+          name: '@deepseek-ai/dsh-terminal-bash'
+          disabled: !!js process.platform !== 'win32'
+          config:
+            shellDialect: pwsh
+        - id: optional-tool-terminal
+          name: '@deepseek-ai/dsh-tool-terminal'

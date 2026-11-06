@@ -1,0 +1,56 @@
+{
+  "name": "dsh-terminal-wsl",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Persistent WSL (Windows Subsystem for Linux) terminal backend for DeepSeek Harness: registers the `wsl` terminal type on top of the shipped terminal-tool stack.",
+  "type": "module",
+  "license": "MIT",
+  "author": "kx2398",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kx2398/dsh-terminal-wsl.git"
+  },
+  "homepage": "https://github.com/kx2398/dsh-terminal-wsl#readme",
+  "bugs": {
+    "url": "https://github.com/kx2398/dsh-terminal-wsl/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "cordis",
+    "wsl",
+    "terminal"
+  ],
+  "engines": {
+    "dsh": ">=0.2.2-rc.1 <0.3.0"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE",
+    "docs/upstream-terminal-bundle.patch.yml",
+    "scripts/check.mjs",
+    "scripts/leak-check.mjs"
+  ],
+  "scripts": {
+    "test": "node test/mock-apply.mjs && node scripts/leak-check.mjs && node scripts/check.mjs",
+    "pack:dist": "node -e \"require('node:fs').mkdirSync('dist',{recursive:true})\" && npm pack --pack-destination dist"
+  },
+  "icon": "./icon.svg",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

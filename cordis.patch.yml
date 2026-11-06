@@ -1,0 +1,73 @@
+# WSL terminal bundle layer.
+#
+# The shipped terminal bundle owns one isolated terminal scope
+# (`optional-persistent-terminals`, from @deepseek-ai/dsh-experimental-terminal-bundle).
+# A backend registered outside that scope would never be visible to the
+# `terminal_*` tools, so this layer redeclares the same group verbatim and
+# appends one extra backend row: `wsl`.
+#
+# Keep the first four children byte-for-byte equivalent to the shipped patch
+# whenever the harness is upgraded; dropping one would remove that backend or
+# the tools from the composition.
+
+- id: optional-persistent-terminals
+  name: cordis:group
+  group: true
+  isolate:
+    terminals: true
+  config:
+    - id: optional-terminal-registry
+      name: '@deepseek-ai/dsh-terminal'
+
+    - id: optional-terminal-bash
+      name: '@deepseek-ai/dsh-terminal-bash'
+      disabled: !!js process.platform === 'win32'
+
+    - id: optional-terminal-pwsh
+      name: '@deepseek-ai/dsh-terminal-bash'
+      disabled: !!js process.platform !== 'win32'
+      config:
+        shellDialect: pwsh
+
+    - id: optional-tool-terminal
+      name: '@deepseek-ai/dsh-tool-terminal'
+
+    # WSL backend: same shipped bash backend, launched through wsl.exe into the
+    # Linux subsystem. `env` sets the private readiness marker inside the
+    # distro, because WSL does not forward arbitrary Windows environment
+    # variables into the Linux process. Kept after the shipped children so a
+    # future upstream row is only lost if it is appended past this point.
+    - id: optional-terminal-wsl
+      name: '@deepseek-ai/dsh-terminal-bash'
+      disabled: !!js process.platform !== 'win32'
+      config:
+        backendType: wsl
+        shellDialect: bash
+        shellPath: 'C:\Windows\System32\wsl.exe'
+        shellArgs:
+          - '-d'
+          - 'kali-linux'
+          - '--'
+          - 'env'
+          # The backend sets its bash-dialect environment on the Windows
+          # process only; WSL does not forward it into the distro, so repeat
+          # the pager/terminal variables here or pager-driven commands
+          # (`git log`, `less`) stall until timeoutMs.
+          - 'TERM=dumb'
+          - 'PAGER=cat'
+          - 'GIT_PAGER=cat'
+          - 'PS1=dsh> '
+          - "PROMPT_COMMAND=printf \"\\033]133;D;%s\\007\" \"$?\"; PS1='dsh> '"
+          - '/bin/bash'
+          - '--noprofile'
+          - '--norc'
+          - '-i'
+        timeoutMs: 60000
+
+- insert:
+    # Tells the model that the `wsl` backend type exists. Without this the
+    # terminal tools still work, but the model only knows the shipped "shell"
+    # type from their schema.
+    - id: terminal-wsl-guidance
+      name: 'dsh-terminal-wsl'
+      disabled: !!js process.platform !== 'win32'

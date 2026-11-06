@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "WSL terminal",
+    "description": "Adds a persistent WSL (Windows Subsystem for Linux) terminal backend, usable from the terminal tools as type \"wsl\"."
+  }
+}
