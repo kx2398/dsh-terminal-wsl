@@ -1,6 +1,6 @@
 {
   "name": "dsh-terminal-wsl",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Persistent WSL (Windows Subsystem for Linux) terminal backend for DeepSeek Harness: registers the `wsl` terminal type on top of the shipped terminal-tool stack.",
   "type": "module",
@@ -27,6 +27,7 @@
   },
   "exports": {
     ".": "./index.js",
+    "./wsl-tool": "./wsl-tool.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./locale/*.json": "./locale/*.json",
     "./icon": "./icon.svg",
@@ -34,6 +35,7 @@
   },
   "files": [
     "index.js",
+    "wsl-tool.js",
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
@@ -44,7 +46,7 @@
     "scripts/leak-check.mjs"
   ],
   "scripts": {
-    "test": "node test/mock-apply.mjs && node scripts/leak-check.mjs && node scripts/check.mjs",
+    "test": "node test/mock-apply.mjs && node test/wsl-tool.mjs && node scripts/leak-check.mjs && node scripts/check.mjs",
     "pack:dist": "node -e \"require('node:fs').mkdirSync('dist',{recursive:true})\" && npm pack --pack-destination dist"
   },
   "icon": "./icon.svg",

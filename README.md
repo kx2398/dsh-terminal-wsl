@@ -5,17 +5,18 @@
 
 - 复用官方 `dsh-terminal` / `dsh-terminal-bash` / `dsh-tool-terminal`，不复制终端实现；
 - 与内置 `shell`（pwsh）后端并存，`terminal_open({ type: "wsl" })` 即切到 Linux；
+- 另注册一次性 `wsl` 工具：单条 Linux 命令，**默认权限下自动发起一次权限申请**，不会让模型退回 PowerShell；
 - Windows 工作目录自动映射为 `/mnt/<盘符>/...`，支持 SIGINT、行缓冲、输出上限、所有者隔离；
-- 纯配置 bundle + 一个提示词插件，无运行时依赖，`npm test` 离线可跑。
+- 配置 bundle + 两个小插件（提示词 / 命令工具），无运行时依赖，`npm test` 离线可跑。
 
 ## 1. 安装
 
 ```text
 # 从 GitHub 按 tag 安装
-plugin_manager({ action: "install_bundle", target: "github:kx2398/dsh-terminal-wsl#v0.1.0" })
+plugin_manager({ action: "install_bundle", target: "github:kx2398/dsh-terminal-wsl#v0.2.0" })
 
 # 或下载 Release 里的 tgz 后本地安装
-plugin_manager({ action: "install_bundle", target: "file:<path-to>/dsh-terminal-wsl-0.1.0.tgz" })
+plugin_manager({ action: "install_bundle", target: "file:<path-to>/dsh-terminal-wsl-0.2.0.tgz" })
 
 # 开发时可直接装本地目录（link 安装，改动即时生效）
 plugin_manager({ action: "install_bundle", target: "<path-to>/dsh-terminal-wsl" })
@@ -42,6 +43,10 @@ DSH 内置终端栈分四层，本插件只动最后一步的「启动命令」�
 - 新增后端类型 `wsl`，`terminal_open({ type: "wsl" })` 打开发行版内的 bash；
 - 其余 5 个工具、输出上限、就绪检测、所有者隔离、进程树清理全部复用官方实现；
 - 内置 `shell`（pwsh）后端继续可用，只是重组合时和其它终端一样会被关闭。
+
+同时注册一个一次性 **`wsl` 工具**（`wsl-tool.js`）：直接以 argv 启动
+`wsl.exe -d <distro> -- bash -lc <base64 命令>`，命令经 base64 转交给 bash，不经过
+PowerShell 引号解析。它是默认权限下使用 WSL 的正路——见下面的「权限模型」。
 
 ## 3. 实现方式
 
@@ -78,6 +83,17 @@ shellArgs:
 **提示词插件**（`index.js`）：向模型说明存在 `wsl` 类型、里面是 POSIX 环境、cwd 已映射，
 避免模型只知道工具 schema 里写的 `"shell"`。
 
+**权限模型（为什么需要一次审批）**：WSL 服务依赖命名管道，`workspace-write` 下连
+`wsl.exe` 本身都起不来；而宿主的升级机制 `approveEscalation` 是「单次调用、`allowed-once`」，
+持久终端读的又是会话级策略，无法借用。因此 `wsl` 工具在会话不是 `danger-full-access` 时，
+会先通过 `ctx.approval` 发起一次针对该命令的权限申请（理由自动生成）：
+
+- 人工批准，或 Auto Review 预设下由审查模型自动批准 → 本次以完全访问执行；
+- 被拒绝、取消或没有审批通道 → **明确报错**，并提示模型向用户说明、不要改用 PowerShell 绕路；
+- 会话已经是完全访问 → 直接执行，不弹审批。
+
+持久 `terminal_open({ type: "wsl" })` 仍要求会话本身处于 `danger-full-access`。
+
 ## 4. 配置
 
 修改 `cordis.patch.yml` 里的 `optional-terminal-wsl` 行即可：
@@ -88,6 +104,8 @@ shellArgs:
 | `timeoutMs` | `60000` | 单次发送（启动及之后的每个 `terminal_send`）等待上限 |
 | `shellPath` | `C:\Windows\System32\wsl.exe` | 一般不用改 |
 | `backendType` | `wsl` | 想并存多个发行版时复制整行并改成 `wsl-ubuntu` 等 |
+| `terminal-wsl-tool` 行的 `config.distro` | `kali-linux` | `wsl` 工具的发行版，需与上面 `-d` 保持一致 |
+| `terminal-wsl-tool` 行的 `config.timeoutMs` | `120000` | `wsl` 工具单条命令的默认超时 |
 
 其余可调项与官方后端一致：`rows`、`cols`、`scrollbackLines`、`scrollbackMaxBytes`、
 `maxReadBytes`、`idleSilenceMs`、`disposeGraceMs` 等（见 `@deepseek-ai/dsh-terminal-bash` 文档）。
@@ -134,17 +152,33 @@ dumb cat
 前台 `sleep 300` 后 `terminal_signal` 发 `SIGINT`，`^C` 回到提示符且会话存活。
 最后 `terminal_close` 关闭。
 
+### 一次性 `wsl` 工具
+
+```text
+wsl({ command: "uname -srm; pwd" })
+wsl({ command: "apt list --installed | head", workdir: "/tmp" })
+```
+
+期望：输出 Linux 内核串与 `/mnt/...` 路径；`workdir` 为 Linux 路径时在发行版内 `cd`；
+非零退出渲染 `[exit code: N]`，超时渲染 `[timed out after Nms]`。会话处于
+`workspace-write` 时，第一次调用会弹出权限申请，批准后同一命令即执行。
+
 ## 7. 已知限制
 
-- **沙箱隔离不覆盖 Linux 侧**：后端只是把 `wsl.exe` 当本地子进程启动，Windows ACL 沙箱
-  约束不到发行版内进程及其 `/mnt/...` 写入，而 `sandbox:policy` 仍会告诉模型写入受限。
-  请只在允许完全访问的会话里用 `type: "wsl"`。本机另实测 `workspace-write` 下 ConPTY
-  命名管道（`\\.\pipe\conpty-*`）被拦，表现为 `PTY shell exited during startup`。
-- **cwd 只接受 Windows 形式路径**：v1 靠 `wsl.exe` 自动翻译；要直接进 `/home/<user>`
-  需要后续版本加自定义 `spawnTerminal`（映射 `\\wsl$\<distro>\...`）。
-- **发行版写死**：默认 `kali-linux`，换发行版改配置。
+- **持久终端需要会话级完全访问**：`workspace-write` 下 ConPTY 命名管道（`\\.\pipe\conpty-*`）
+  被拦，`terminal_open` 对所有后端都会报 `PTY shell exited during startup`。交互式 WSL 会话
+  请先把会话切到 `danger-full-access`；单条命令改用 `wsl` 工具，它会自己发起权限申请。
+- **审批粒度是「一次命令」**：升级结果只有 `allowed-once`，不会长期放行。嫌频繁可把会话设为
+  完全访问，或启用 Auto Review 预设让审查模型代为批准。
+- **沙箱隔离不覆盖 Linux 侧**：`wsl.exe` 是本地子进程，Windows ACL 沙箱约束不到发行版内
+  进程及其 `/mnt/...` 写入，而 `sandbox:policy` 仍会告诉模型写入受限；请把它当作
+  「完全访问语义」使用，不要用它承载未授权的写操作。
+- **cwd 只接受 Windows 形式路径**（持久终端）：靠 `wsl.exe` 自动翻译；要直接进
+  `/home/<user>` 需要后续版本加自定义 `spawnTerminal`（映射 `\\wsl$\<distro>\...`）。
+  `wsl` 工具已支持 Linux 绝对路径（在发行版内 `cd`）。
+- **发行版写死**：默认 `kali-linux`，换发行版改配置（两处：终端行与 `wsl` 工具行）。
 - **上游耦合**：覆盖内置组，DSH 升级后需跑 `scripts/check.mjs` 并同步上游快照。
-- **仅 Windows**：非 Windows 平台该行 `disabled`，插件退化为空操作。
+- **仅 Windows**：非 Windows 平台相关行 `disabled`，插件退化为空操作。
 
 ## 8. 与生态现有插件的关系
 
@@ -159,9 +193,11 @@ dumb cat
 ```
 dsh-terminal-wsl/
 ├── package.json                              # dsh.bundle.patch / exports / engines.dsh
-├── cordis.patch.yml                          # 终端组覆盖 + wsl 后端 + 提示词插件
-├── index.js                                  # 唯一的 JS 插件（系统提示词指引）
-├── test/mock-apply.mjs                       # 离线契约测试
+├── cordis.patch.yml                          # 终端组覆盖 + wsl 后端 + 提示词 + wsl 工具
+├── index.js                                  # 系统提示词指引（终端类型 + wsl 工具）
+├── wsl-tool.js                               # 一次性 wsl 工具（审批 + argv 安全执行）
+├── test/mock-apply.mjs                       # 离线契约测试（提示词插件）
+├── test/wsl-tool.mjs                         # 离线契约测试（wsl 工具与审批编排）
 ├── scripts/check.mjs                         # 补丁/上游一致性自检
 ├── scripts/leak-check.mjs                    # 敏感信息防泄漏检查
 ├── docs/upstream-terminal-bundle.patch.yml   # 上游组快照（DSH 升级比对）

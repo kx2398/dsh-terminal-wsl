@@ -23,7 +23,8 @@ export const inject = ['systemPrompt']
  * translated cwd).
  */
 const GUIDANCE =
-  'A WSL terminal backend is registered as terminal type "wsl": it runs an interactive bash shell inside the Windows Subsystem for Linux distribution configured for this profile (kali-linux by default), reached through the same terminal_* tools, e.g. terminal_open with type "wsl". Inside that session use Linux/POSIX paths and commands; the Windows session working directory is translated to its /mnt/<drive>/... equivalent, and processes started there run in the Linux subsystem, not on Windows.'
+  'A WSL terminal backend is registered as terminal type "wsl": it runs an interactive bash shell inside the Windows Subsystem for Linux distribution configured for this profile (kali-linux by default), reached through the same terminal_* tools, e.g. terminal_open with type "wsl". Inside that session use Linux/POSIX paths and commands; the Windows session working directory is translated to its /mnt/<drive>/... equivalent, and processes started there run in the Linux subsystem, not on Windows. '
+  + 'A one-shot "wsl" tool is also registered: it runs a single Linux command, automatically asks the user for the danger-full-access approval WSL requires, and reports any denial. Prefer the wsl tool for individual Linux commands and the persistent type "wsl" session for interactive work; if WSL is unavailable under the current policy, say so instead of silently working around it with PowerShell.'
 
 /**
  * Register the guidance section next to the shipped terminal guidance.

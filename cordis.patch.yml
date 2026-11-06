@@ -71,3 +71,15 @@
     - id: terminal-wsl-guidance
       name: 'dsh-terminal-wsl'
       disabled: !!js process.platform !== 'win32'
+
+    # One-shot WSL command tool with a per-call approval request. WSL cannot
+    # run under the default workspace-write policy (the Windows sandbox denies
+    # the WSL service's named pipes), so this tool asks for danger-full-access
+    # once per command instead of letting the model detour through PowerShell.
+    # Keep `config.distro` in sync with the `-d` value above.
+    - id: terminal-wsl-tool
+      name: 'dsh-terminal-wsl/wsl-tool'
+      disabled: !!js process.platform !== 'win32'
+      config:
+        distro: kali-linux
+        timeoutMs: 120000
