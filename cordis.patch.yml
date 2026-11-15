@@ -6,9 +6,11 @@
 # `terminal_*` tools, so this layer redeclares the same group verbatim and
 # appends one extra backend row: `wsl`.
 #
-# Keep the first four children byte-for-byte equivalent to the shipped patch
-# whenever the harness is upgraded; dropping one would remove that backend or
-# the tools from the composition.
+# DSH >= 0.2.2-rc.3 serves the default `shell` type from
+# `@deepseek-ai/dsh-terminal-panel` (sidebar terminals the user can watch and
+# take over). Keep the three upstream children byte-for-byte equivalent to the
+# shipped patch whenever the harness is upgraded; dropping one removes the
+# panel, the tools, or the registry from the composition.
 
 - id: optional-persistent-terminals
   name: cordis:group
@@ -19,20 +21,15 @@
     - id: optional-terminal-registry
       name: '@deepseek-ai/dsh-terminal'
 
-    - id: optional-terminal-bash
-      name: '@deepseek-ai/dsh-terminal-bash'
-      disabled: !!js process.platform === 'win32'
-
-    - id: optional-terminal-pwsh
-      name: '@deepseek-ai/dsh-terminal-bash'
-      disabled: !!js process.platform !== 'win32'
+    - id: optional-terminal-panel
+      name: '@deepseek-ai/dsh-terminal-panel'
       config:
-        shellDialect: pwsh
+        preferredShells: !!js "process.platform === 'win32' ? ['pwsh', 'powershell'] : []"
 
     - id: optional-tool-terminal
       name: '@deepseek-ai/dsh-tool-terminal'
 
-    # WSL backend: same shipped bash backend, launched through wsl.exe into the
+    # WSL backend: the shipped bash backend, launched through wsl.exe into the
     # Linux subsystem. `env` sets the private readiness marker inside the
     # distro, because WSL does not forward arbitrary Windows environment
     # variables into the Linux process. Kept after the shipped children so a

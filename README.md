@@ -1,10 +1,11 @@
 # dsh-terminal-wsl · WSL 终端后端
 
 给 DeepSeek Harness（DSH）补一个 **WSL 后端**：沿用内置的 `terminal_*` 工具，在 Windows 上
-通过 `wsl.exe` 打开 Linux 子系统的持久交互式 bash，后端类型为 `wsl`。
+通过 `wsl.exe` 打开 Linux 子系统的持久交互式 bash，后端类型为 `wsl`。要求
+**DSH >= 0.2.2-rc.3**（侧栏终端时代）。
 
-- 复用官方 `dsh-terminal` / `dsh-terminal-bash` / `dsh-tool-terminal`，不复制终端实现；
-- 与内置 `shell`（pwsh）后端并存，`terminal_open({ type: "wsl" })` 即切到 Linux；
+- 复用官方 `dsh-terminal` / `dsh-terminal-panel` / `dsh-terminal-bash` / `dsh-tool-terminal`，不复制终端实现；
+- 与内置的侧栏终端（`type: "shell"`，人可旁观接管）并存，`terminal_open({ type: "wsl" })` 切到 Linux；
 - 另注册一次性 `wsl` 工具：单条 Linux 命令，**默认权限下自动发起一次权限申请**，不会让模型退回 PowerShell；
 - Windows 工作目录自动映射为 `/mnt/<盘符>/...`，支持 SIGINT、行缓冲、输出上限、所有者隔离；
 - 配置 bundle + 两个小插件（提示词 / 命令工具），无运行时依赖，`npm test` 离线可跑。
@@ -13,10 +14,10 @@
 
 ```text
 # 从 GitHub 按 tag 安装
-plugin_manager({ action: "install_bundle", target: "github:kx2398/dsh-terminal-wsl#v0.2.0" })
+plugin_manager({ action: "install_bundle", target: "github:kx2398/dsh-terminal-wsl#v0.3.0" })
 
 # 或下载 Release 里的 tgz 后本地安装
-plugin_manager({ action: "install_bundle", target: "file:<path-to>/dsh-terminal-wsl-0.2.0.tgz" })
+plugin_manager({ action: "install_bundle", target: "file:<path-to>/dsh-terminal-wsl-0.3.0.tgz" })
 
 # 开发时可直接装本地目录（link 安装，改动即时生效）
 plugin_manager({ action: "install_bundle", target: "<path-to>/dsh-terminal-wsl" })
@@ -28,21 +29,22 @@ plugin_manager({ action: "install_bundle", target: "<path-to>/dsh-terminal-wsl" 
 
 ## 2. 它做什么
 
-DSH 内置终端栈分四层，本插件只动最后一步的「启动命令」：
+DSH 0.2.2-rc.3 的内置终端栈分四层，本插件只追加一个后端：
 
 | 包 | 职责 |
 |---|---|
 | `@deepseek-ai/dsh-terminal` | `ctx.terminals`：会话 id、所有者隔离、清理 |
-| `@deepseek-ai/dsh-terminal-bash` | 后端：PTY 启动、提示符就绪检测、行缓冲、信号 |
-| `@deepseek-ai/dsh-tool-terminal` | 模型工具：`terminal_open` / `send` / `read` / `signal` / `close` / `list` |
+| `@deepseek-ai/dsh-terminal-panel` | 内置 `shell` 后端：每次 `terminal_open` 都是人可旁观/接管的侧栏标签页 |
+| `@deepseek-ai/dsh-tool-terminal` | 模型工具：`terminal_open` / `send` / `read` / `signal` / `close` / `list`（面板另注册两个只读的 `user_terminal_*`） |
 | `@deepseek-ai/dsh-experimental-terminal-bundle` | 把上面三个装进一个 `isolate: { terminals: true }` 组 |
 
-插件在同一隔离组内再注册一个 `@deepseek-ai/dsh-terminal-bash` 实例，把 shell 换成
-`wsl.exe`，于是：
+本插件在同一个隔离组内**保留这三个上游子项**，再追加一个 `@deepseek-ai/dsh-terminal-bash`
+实例（旧版 PTY 后端）并注册为 `wsl` 类型，于是：
 
 - 新增后端类型 `wsl`，`terminal_open({ type: "wsl" })` 打开发行版内的 bash；
-- 其余 5 个工具、输出上限、就绪检测、所有者隔离、进程树清理全部复用官方实现；
-- 内置 `shell`（pwsh）后端继续可用，只是重组合时和其它终端一样会被关闭。
+- 内置侧栏终端（`type: "shell"`）与 `user_terminal_*` 工具保持原样；
+- `wsl` 会话是 **agent-only**：不会出现在侧栏，人不能旁观/接管（面板只服务它自己的 `shell` 后端）；
+- 其余工具、输出上限、就绪检测、所有者隔离、进程树清理沿用官方实现。
 
 同时注册一个一次性 **`wsl` 工具**（`wsl-tool.js`）：直接以 argv 启动
 `wsl.exe -d <distro> -- bash -lc <base64 命令>`，命令经 base64 转交给 bash，不经过
@@ -52,9 +54,14 @@ PowerShell 引号解析。它是默认权限下使用 WSL 的正路——见下�
 
 **为什么覆盖整个组**：`optional-persistent-terminals` 组带 `isolate: { terminals: true }`，
 组外的插件注入不到这个 `ctx.terminals` 实例；`terminal_*` 工具只认组内的后端。因此
-`cordis.patch.yml` 按 id 覆盖该组，原样重声明四个内置子项，再追加一行 WSL 后端。
-覆盖语义是「整体替换 config」，所以前四个子项必须与上游保持一致
+`cordis.patch.yml` 按 id 覆盖该组，原样重声明**三个**内置子项（0.2.2-rc.3 起是
+`optional-terminal-registry` / `optional-terminal-panel` / `optional-tool-terminal`），
+再追加一行 WSL 后端。覆盖语义是「整体替换 config」，所以这三个子项必须与上游保持一致
 （`docs/upstream-terminal-bundle.patch.yml` 保存了上游快照供比对）。
+
+**升级注意**：0.2.2-rc.2 起上游把 `optional-terminal-bash` / `optional-terminal-pwsh`
+换成了 `optional-terminal-panel`。在 rc.3 上仍安装 v0.2.0 会重声明已移除的旧行、丢掉侧栏
+终端，因此必须使用本版本（v0.3.0+）。
 
 **启动命令**：
 
@@ -157,6 +164,9 @@ dumb cat
 前台 `sleep 300` 后 `terminal_signal` 发 `SIGINT`，`^C` 回到提示符且会话存活。
 最后 `terminal_close` 关闭。
 
+同时确认内置侧栏终端未被覆盖破坏：`terminal_open({ type: "shell" })` 打开后应出现可旁观/
+接管的侧栏标签页，且 `user_terminal_list` 工具存在（由 `dsh-terminal-panel` 注册）。
+
 ### 一次性 `wsl` 工具
 
 ```text
@@ -182,13 +192,18 @@ wsl({ command: "apt list --installed | head", workdir: "/tmp" })
   `/home/<user>` 需要后续版本加自定义 `spawnTerminal`（映射 `\\wsl$\<distro>\...`）。
   `wsl` 工具已支持 Linux 绝对路径（在发行版内 `cd`）。
 - **发行版写死**：默认 `kali-linux`，换发行版改配置（两处：终端行与 `wsl` 工具行）。
-- **上游耦合**：覆盖内置组，DSH 升级后需跑 `scripts/check.mjs` 并同步上游快照。
+- **`wsl` 会话看不到侧栏**：内置 `shell` 终端由 `dsh-terminal-panel` 提供，人可在侧栏旁观
+  并接管；`wsl` 类型复用旧版 PTY 后端，只对 Agent 可见。需要人看/接手的终端请用
+  `type: "shell"`（在 Windows 上运行 pwsh）。
+- **上游耦合**：覆盖内置组，DSH 升级后需跑 `scripts/check.mjs` 并同步上游快照；0.2.2-rc.3
+  起组子项变为 registry / panel / tool-terminal，旧版 v0.2.0 不能再用。
 - **仅 Windows**：非 Windows 平台相关行 `disabled`，插件退化为空操作。
 
 ## 8. 与生态现有插件的关系
 
-- 内置 `@deepseek-ai/dsh-experimental-terminal-bundle` 提供 `shell`（pwsh）与六个工具；
-  本插件只是多注册一个 `wsl` 类型，不改工具、不改内置后端。
+- 内置 `@deepseek-ai/dsh-experimental-terminal-bundle` 提供侧栏 `shell` 后端、六个
+  `terminal_*` 工具与两个 `user_terminal_*` 只读工具；本插件只多注册一个 `wsl` 类型，
+  不改工具、不改内置后端。
 - 与 `dsh-session-mesh` 等其它 profile 插件互不依赖：mesh 管会话协作，本插件管终端基底。
 - 若还有其它终端基底插件，只要 `backendType` 不冲突即可并存；同类型会触发
   `DUPLICATE_BACKEND`。

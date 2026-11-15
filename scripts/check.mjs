@@ -50,7 +50,7 @@ if (load === undefined) {
   console.log('NOTE  js-yaml unavailable (set DSH_PROFILE_DIR); using text checks only')
   const upstream = readFileSync(upstreamFile, 'utf8')
   const ours = readFileSync(oursFile, 'utf8')
-  for (const id of ['optional-terminal-registry', 'optional-terminal-bash', 'optional-terminal-pwsh', 'optional-tool-terminal'])
+  for (const id of ['optional-terminal-registry', 'optional-terminal-panel', 'optional-tool-terminal'])
     ours.includes(`id: ${id}`) ? ok(`child present: ${id}`) : bad(`child missing: ${id}`)
   ours.includes('id: optional-terminal-wsl') ? ok('wsl child present') : bad('wsl child missing')
   upstream.includes('isolate') && ours.includes('isolate') ? ok('isolate preserved') : bad('isolate missing')
